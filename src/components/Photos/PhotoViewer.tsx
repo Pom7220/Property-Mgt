@@ -15,7 +15,6 @@ export default function PhotoViewer({ photos, initialIndex = 0, onClose }: Photo
   // Pinch-to-zoom state
   const scaleRef     = useRef(1)
   const lastScaleRef = useRef(1)
-  const originRef    = useRef({ x: 0, y: 0 })
   const translateRef = useRef({ x: 0, y: 0 })
   const imgRef       = useRef<HTMLImageElement>(null)
   const [, forceRender] = useState(0)

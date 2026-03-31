@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
-import { Camera, Plus, Trash2, GripVertical } from 'lucide-react'
-import { supabase, STORAGE_BUCKET, getPublicUrl } from '../../lib/supabase'
+import { Camera, Plus, Trash2 } from 'lucide-react'
+import { supabase, STORAGE_BUCKET } from '../../lib/supabase'
 import type { Photo, PhotoEntityType } from '../../types'
 import PhotoViewer  from './PhotoViewer'
 import PhotoCropper from './PhotoCropper'

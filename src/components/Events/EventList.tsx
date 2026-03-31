@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Zap, Pencil, Trash2, ChevronDown, ChevronUp, Calendar, DollarSign } from 'lucide-react'
+import { Plus, Zap, Pencil, Trash2, Calendar, DollarSign } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { fetchPhotos } from '../../lib/photos'
 import { useAuth } from '../../contexts/AuthContext'
