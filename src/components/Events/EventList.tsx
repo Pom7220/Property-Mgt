@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Zap, Pencil, Trash2, ChevronDown, ChevronUp, Calendar, DollarSign } from 'lucide-react'
-import { supabase, getPublicUrl } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { fetchPhotos } from '../../lib/photos'
 import { useAuth } from '../../contexts/AuthContext'
 import type { PropertyEvent } from '../../types'
 import { EVENT_TYPE_LABELS } from '../../types'
@@ -29,23 +30,16 @@ export default function EventList({ propertyId }: Props) {
   useEffect(() => { fetchEvents() }, [propertyId])
 
   const fetchEvents = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pm_events')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order,caption,entity_type)')
+      .select('*')
       .eq('property_id', propertyId)
-      .order('event_date', { ascending: false })
+      .order('event_date', { ascending: false, nullsFirst: false })
 
-    if (data) setEvents(data.map(ev => ({
-      ...ev,
-      photos: (ev.photos ?? [])
-        .filter((ph: { entity_type: string }) => ph.entity_type === 'event')
-        .map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number; caption: string | null; entity_type: string }) => ({
-          ...ph,
-          url:           getPublicUrl(ph.storage_path),
-          thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-        }))
-        .sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-    })))
+    if (!error && data) {
+      const photoMap = await fetchPhotos('event', data.map(e => e.id))
+      setEvents(data.map(e => ({ ...e, photos: photoMap[e.id] ?? [] })))
+    }
     setLoading(false)
   }
 
@@ -75,7 +69,6 @@ export default function EventList({ propertyId }: Props) {
         </div>
       ) : (
         <div className="relative">
-          {/* Timeline line */}
           <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-100" />
           <div className="space-y-3">
             {events.map(ev => (
@@ -88,7 +81,8 @@ export default function EventList({ propertyId }: Props) {
       )}
 
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'แก้ไขเหตุการณ์' : 'บันทึกเหตุการณ์'}>
-        <EventForm propertyId={propertyId} initial={editing ?? undefined} onSaved={() => { setModal(false); fetchEvents() }} />
+        <EventForm propertyId={propertyId} initial={editing ?? undefined}
+          onSaved={() => { setModal(false); fetchEvents() }} />
       </Modal>
     </div>
   )
@@ -97,9 +91,9 @@ export default function EventList({ propertyId }: Props) {
 function EventCard({ event: ev, userId, onEdit, onUpdated, colorClass }: {
   event: PropertyEvent; userId: string; onEdit: () => void; onUpdated: () => void; colorClass: string
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded,   setExpanded]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [deleting,   setDeleting]   = useState(false)
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -109,11 +103,9 @@ function EventCard({ event: ev, userId, onEdit, onUpdated, colorClass }: {
 
   return (
     <div className="flex gap-3 relative">
-      {/* Dot */}
       <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center z-10 ${colorClass}`}>
         <Zap size={14} />
       </div>
-
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <button onClick={() => setExpanded(e => !e)} className="w-full text-left px-4 py-3 active:bg-gray-50">
           <div className="flex items-start justify-between gap-2">
@@ -149,8 +141,11 @@ function EventCard({ event: ev, userId, onEdit, onUpdated, colorClass }: {
               </button>
             </div>
             {[['ผู้รับเหมา', ev.contractor], ['คำอธิบาย', ev.description], ['หมายเหตุ', ev.notes]]
-              .filter(([,v]) => v).map(([l, v]) => (
-              <div key={l as string} className="flex gap-2"><span className="text-xs text-gray-400 w-24 flex-shrink-0">{l}</span><span className="text-sm text-gray-700">{v}</span></div>
+              .filter(([, v]) => v).map(([l, v]) => (
+              <div key={l as string} className="flex gap-2">
+                <span className="text-xs text-gray-400 w-24 flex-shrink-0">{l}</span>
+                <span className="text-sm text-gray-700">{v}</span>
+              </div>
             ))}
             <PhotoGrid entityType="event" entityId={ev.id} userId={userId} photos={ev.photos ?? []} onUpdated={onUpdated} />
           </div>

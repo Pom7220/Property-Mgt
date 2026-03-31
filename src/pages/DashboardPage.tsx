@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Building2, LogOut, Search } from 'lucide-react'
-import { supabase, getPublicUrl } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { fetchPhotos } from '../lib/photos'
 import { useAuth } from '../contexts/AuthContext'
 import type { Property } from '../types'
 import { PROPERTY_TYPE_LABELS } from '../types'
@@ -18,7 +19,6 @@ export default function DashboardPage() {
     if (!user) return
     fetchProperties()
 
-    // Realtime subscription
     const channel = supabase
       .channel('pm_properties_changes')
       .on('postgres_changes', {
@@ -33,20 +33,13 @@ export default function DashboardPage() {
   const fetchProperties = async () => {
     const { data, error } = await supabase
       .from('pm_properties')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order)')
+      .select('*')
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
 
     if (!error && data) {
-      const enriched = data.map(p => ({
-        ...p,
-        photos: (p.photos ?? []).map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number }) => ({
-          ...ph,
-          url:           getPublicUrl(ph.storage_path),
-          thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-        })).sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-      }))
-      setProperties(enriched)
+      const photoMap = await fetchPhotos('property', data.map(p => p.id))
+      setProperties(data.map(p => ({ ...p, photos: photoMap[p.id] ?? [] })))
     }
     setLoading(false)
   }
@@ -58,7 +51,6 @@ export default function DashboardPage() {
     (p.province ?? '').toLowerCase().includes(search.toLowerCase())
   )
 
-  // Group by type
   const grouped = (['house', 'condo', 'land'] as const).map(type => ({
     type,
     label: PROPERTY_TYPE_LABELS[type],
@@ -81,8 +73,6 @@ export default function DashboardPage() {
             <LogOut size={18} />
           </button>
         </div>
-
-        {/* Search */}
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -119,25 +109,19 @@ export default function DashboardPage() {
               </h2>
               <div className="space-y-3">
                 {items.map(p => (
-                  <PropertyCard
-                    key={p.id}
-                    property={p}
-                    onClick={() => navigate(`/property/${p.id}`)}
-                  />
+                  <PropertyCard key={p.id} property={p} onClick={() => navigate(`/property/${p.id}`)} />
                 ))}
               </div>
             </section>
           ))
         )}
-
-        {/* Bottom spacer */}
         <div className="h-4" />
       </div>
 
       {/* FAB */}
       <button
         onClick={() => navigate('/property/new')}
-        className="fixed right-5 bottom-20 z-20 w-14 h-14 bg-primary-600 rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+        className="fixed right-5 z-20 w-14 h-14 bg-primary-600 rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
         style={{ bottom: 'calc(4rem + max(0.5rem, env(safe-area-inset-bottom)))' }}
       >
         <Plus size={26} className="text-white" />

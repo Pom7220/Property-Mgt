@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Wallet } from 'lucide-react'
-import { supabase, getPublicUrl } from '../../lib/supabase'
+import { Plus, Wallet, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import { fetchPhotos } from '../../lib/photos'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Fee } from '../../types'
 import { FEE_TYPE_LABELS, FEE_FREQ_LABELS } from '../../types'
@@ -8,7 +9,6 @@ import Modal         from '../ui/Modal'
 import FeeForm       from './FeeForm'
 import PhotoGrid     from '../Photos/PhotoGrid'
 import ConfirmDialog from '../ui/ConfirmDialog'
-import { Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface Props { propertyId: string }
 
@@ -22,23 +22,16 @@ export default function FeeList({ propertyId }: Props) {
   useEffect(() => { fetchFees() }, [propertyId])
 
   const fetchFees = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pm_fees')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order,caption,entity_type)')
+      .select('*')
       .eq('property_id', propertyId)
       .order('fee_type')
 
-    if (data) setFees(data.map(f => ({
-      ...f,
-      photos: (f.photos ?? [])
-        .filter((ph: { entity_type: string }) => ph.entity_type === 'fee')
-        .map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number; caption: string | null; entity_type: string }) => ({
-          ...ph,
-          url:           getPublicUrl(ph.storage_path),
-          thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-        }))
-        .sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-    })))
+    if (!error && data) {
+      const photoMap = await fetchPhotos('fee', data.map(f => f.id))
+      setFees(data.map(f => ({ ...f, photos: photoMap[f.id] ?? [] })))
+    }
     setLoading(false)
   }
 
@@ -50,7 +43,6 @@ export default function FeeList({ propertyId }: Props) {
 
   return (
     <div className="p-4 space-y-3">
-      {/* Summary */}
       {fees.length > 0 && (
         <div className="bg-primary-50 border border-primary-100 rounded-2xl p-3 flex items-center justify-between">
           <span className="text-xs text-primary-700 font-medium">รวมค่าใช้จ่ายต่อปี</span>
@@ -58,10 +50,8 @@ export default function FeeList({ propertyId }: Props) {
         </div>
       )}
 
-      <button
-        onClick={() => { setEditing(null); setModal(true) }}
-        className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 active:border-primary-300 active:text-primary-600"
-      >
+      <button onClick={() => { setEditing(null); setModal(true) }}
+        className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 active:border-primary-300 active:text-primary-600">
         <Plus size={18} /> เพิ่มค่าใช้จ่าย
       </button>
 
@@ -80,16 +70,17 @@ export default function FeeList({ propertyId }: Props) {
       )}
 
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'แก้ไขค่าใช้จ่าย' : 'เพิ่มค่าใช้จ่าย'}>
-        <FeeForm propertyId={propertyId} initial={editing ?? undefined} onSaved={() => { setModal(false); fetchFees() }} />
+        <FeeForm propertyId={propertyId} initial={editing ?? undefined}
+          onSaved={() => { setModal(false); fetchFees() }} />
       </Modal>
     </div>
   )
 }
 
 function FeeCard({ fee, userId, onEdit, onUpdated }: { fee: Fee; userId: string; onEdit: () => void; onUpdated: () => void }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded,   setExpanded]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [deleting,   setDeleting]   = useState(false)
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -107,7 +98,11 @@ function FeeCard({ fee, userId, onEdit, onUpdated }: { fee: Fee; userId: string;
             {fee.amount != null ? `฿${fee.amount.toLocaleString()}` : '-'} • {FEE_FREQ_LABELS[fee.frequency]}
           </p>
         </div>
-        {fee.next_due_date && <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full flex-shrink-0">ครบ {fee.next_due_date}</span>}
+        {fee.next_due_date && (
+          <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full flex-shrink-0">
+            ครบ {fee.next_due_date}
+          </span>
+        )}
         {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
       </button>
 
@@ -121,8 +116,12 @@ function FeeCard({ fee, userId, onEdit, onUpdated }: { fee: Fee; userId: string;
               <Trash2 size={12} /> ลบ
             </button>
           </div>
-          {[['ชำระล่าสุด', fee.last_paid_date], ['หมายเหตุ', fee.notes]].filter(([,v]) => v).map(([l, v]) => (
-            <div key={l as string} className="flex gap-2"><span className="text-xs text-gray-400 w-24 flex-shrink-0">{l}</span><span className="text-sm text-gray-700">{v}</span></div>
+          {[['ชำระล่าสุด', fee.last_paid_date], ['หมายเหตุ', fee.notes]]
+            .filter(([, v]) => v).map(([l, v]) => (
+            <div key={l as string} className="flex gap-2">
+              <span className="text-xs text-gray-400 w-24 flex-shrink-0">{l}</span>
+              <span className="text-sm text-gray-700">{v}</span>
+            </div>
           ))}
           <PhotoGrid entityType="fee" entityId={fee.id} userId={userId} photos={fee.photos ?? []} onUpdated={onUpdated} />
         </div>

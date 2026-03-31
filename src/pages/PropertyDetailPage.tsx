@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, Trash2, MapPin } from 'lucide-react'
-import { supabase, getPublicUrl } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { fetchEntityPhotos } from '../lib/photos'
 import { useAuth } from '../contexts/AuthContext'
 import type { Property } from '../types'
 import { PROPERTY_TYPE_LABELS } from '../types'
@@ -25,15 +26,18 @@ const TABS: { id: Tab; label: string }[] = [
 const TYPE_BG = { house: 'bg-emerald-600', condo: 'bg-blue-600', land: 'bg-amber-600' }
 
 export default function PropertyDetailPage() {
-  const { id }    = useParams<{ id: string }>()
-  const { user }  = useAuth()
-  const navigate  = useNavigate()
+  const { id }          = useParams<{ id: string }>()
+  const { user }        = useAuth()
+  const navigate        = useNavigate()
+  const [searchParams]  = useSearchParams()
 
-  const [property, setProperty]       = useState<Property | null>(null)
-  const [loading, setLoading]         = useState(true)
-  const [activeTab, setActiveTab]     = useState<Tab>('overview')
-  const [confirmDel, setConfirmDel]   = useState(false)
-  const [deleting, setDeleting]       = useState(false)
+  const [property, setProperty]     = useState<Property | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [activeTab, setActiveTab]   = useState<Tab>(
+    (searchParams.get('tab') as Tab) ?? 'overview'
+  )
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting]     = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -43,22 +47,13 @@ export default function PropertyDetailPage() {
   const fetchProperty = async () => {
     const { data, error } = await supabase
       .from('pm_properties')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order,caption,entity_type)')
+      .select('*')
       .eq('id', id!)
       .single()
 
     if (!error && data) {
-      setProperty({
-        ...data,
-        photos: (data.photos ?? [])
-          .filter((ph: { entity_type: string }) => ph.entity_type === 'property')
-          .map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number; caption: string | null; entity_type: string }) => ({
-            ...ph,
-            url:           getPublicUrl(ph.storage_path),
-            thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-          }))
-          .sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-      })
+      const photos = await fetchEntityPhotos('property', id!)
+      setProperty({ ...data, photos })
     }
     setLoading(false)
   }
@@ -86,7 +81,7 @@ export default function PropertyDetailPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-gray-50">
-      {/* Header bar */}
+      {/* Header */}
       <div className={`sticky top-0 z-10 ${typeBg} pt-safe px-4 pb-0`}>
         <div className="flex items-center justify-between h-12">
           <button onClick={() => navigate(-1)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
@@ -102,7 +97,6 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        {/* Property name */}
         <div className="pb-3">
           {property.project_name && <p className="text-white/70 text-xs">{property.project_name}</p>}
           <h1 className="text-white font-bold text-lg leading-tight">{property.name}</h1>
@@ -120,15 +114,13 @@ export default function PropertyDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex overflow-x-auto gap-1 pb-0 scrollbar-hide">
+        <div className="flex overflow-x-auto gap-1 pb-0">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
-                activeTab === t.id
-                  ? 'text-white border-white'
-                  : 'text-white/60 border-transparent'
+              className={`px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === t.id ? 'text-white border-white' : 'text-white/60 border-transparent'
               }`}
             >
               {t.label}
@@ -162,22 +154,19 @@ export default function PropertyDetailPage() {
   )
 }
 
-// ─── Overview Tab ─────────────────────────────────────────────────────────────
-
 function OverviewTab({ property, onPhotosUpdated, userId }: { property: Property; onPhotosUpdated: () => void; userId: string }) {
   const rows: [string, string | null | undefined][] = [
-    ['ที่อยู่',           property.address],
-    ['เขต/อำเภอ',         property.district],
-    ['จังหวัด',           property.province],
-    ['วันที่ซื้อ',         property.purchase_date],
-    ['ราคาซื้อ',          property.purchase_price != null ? `฿${property.purchase_price.toLocaleString()}` : null],
-    ['มูลค่าปัจจุบัน',   property.current_value  != null ? `฿${property.current_value.toLocaleString()}`  : null],
-    ['หมายเหตุ',          property.notes],
+    ['ที่อยู่',         property.address],
+    ['เขต/อำเภอ',       property.district],
+    ['จังหวัด',         property.province],
+    ['วันที่ซื้อ',       property.purchase_date],
+    ['ราคาซื้อ',        property.purchase_price != null ? `฿${property.purchase_price.toLocaleString()}` : null],
+    ['มูลค่าปัจจุบัน', property.current_value  != null ? `฿${property.current_value.toLocaleString()}`  : null],
+    ['หมายเหตุ',        property.notes],
   ]
 
   return (
     <div className="p-4 space-y-4">
-      {/* Photo gallery */}
       <PhotoGrid
         entityType="property"
         entityId={property.id}
@@ -185,8 +174,6 @@ function OverviewTab({ property, onPhotosUpdated, userId }: { property: Property
         photos={property.photos ?? []}
         onUpdated={onPhotosUpdated}
       />
-
-      {/* Info card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-50">
         {rows.filter(([, v]) => v).map(([label, value]) => (
           <div key={label} className="flex items-start gap-3 px-4 py-3">

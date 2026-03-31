@@ -4,6 +4,7 @@ import LoginPage            from './pages/LoginPage'
 import DashboardPage        from './pages/DashboardPage'
 import PropertyDetailPage   from './pages/PropertyDetailPage'
 import AddEditPropertyPage  from './pages/AddEditPropertyPage'
+import RemindersPage        from './pages/RemindersPage'
 import Layout               from './components/Layout/Layout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -31,6 +32,7 @@ export default function App() {
             }
           >
             <Route index element={<DashboardPage />} />
+            <Route path="reminders"          element={<RemindersPage />} />
             <Route path="property/new"       element={<AddEditPropertyPage />} />
             <Route path="property/:id"       element={<PropertyDetailPage />} />
             <Route path="property/:id/edit"  element={<AddEditPropertyPage />} />

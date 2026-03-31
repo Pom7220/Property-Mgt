@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Receipt, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
-import { supabase, getPublicUrl } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { fetchPhotos } from '../../lib/photos'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Tax } from '../../types'
 import { TAX_TYPE_LABELS } from '../../types'
@@ -21,23 +22,16 @@ export default function TaxList({ propertyId }: Props) {
   useEffect(() => { fetchTaxes() }, [propertyId])
 
   const fetchTaxes = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pm_taxes')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order,caption,entity_type)')
+      .select('*')
       .eq('property_id', propertyId)
       .order('year', { ascending: false })
 
-    if (data) setTaxes(data.map(t => ({
-      ...t,
-      photos: (t.photos ?? [])
-        .filter((ph: { entity_type: string }) => ph.entity_type === 'tax')
-        .map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number; caption: string | null; entity_type: string }) => ({
-          ...ph,
-          url:           getPublicUrl(ph.storage_path),
-          thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-        }))
-        .sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-    })))
+    if (!error && data) {
+      const photoMap = await fetchPhotos('tax', data.map(t => t.id))
+      setTaxes(data.map(t => ({ ...t, photos: photoMap[t.id] ?? [] })))
+    }
     setLoading(false)
   }
 
@@ -63,16 +57,17 @@ export default function TaxList({ propertyId }: Props) {
       )}
 
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'แก้ไขภาษี' : 'เพิ่มรายการภาษี'}>
-        <TaxForm propertyId={propertyId} initial={editing ?? undefined} onSaved={() => { setModal(false); fetchTaxes() }} />
+        <TaxForm propertyId={propertyId} initial={editing ?? undefined}
+          onSaved={() => { setModal(false); fetchTaxes() }} />
       </Modal>
     </div>
   )
 }
 
 function TaxCard({ tax, userId, onEdit, onUpdated }: { tax: Tax; userId: string; onEdit: () => void; onUpdated: () => void }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded,   setExpanded]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [deleting,   setDeleting]   = useState(false)
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -108,9 +103,12 @@ function TaxCard({ tax, userId, onEdit, onUpdated }: { tax: Tax; userId: string;
             </button>
           </div>
           {[['มูลค่าประเมิน', tax.assessed_value != null ? `฿${tax.assessed_value.toLocaleString()}` : null],
-            ['เลขที่ใบเสร็จ', tax.receipt_number], ['หมายเหตุ', tax.notes]
-          ].filter(([,v]) => v).map(([l, v]) => (
-            <div key={l as string} className="flex gap-2"><span className="text-xs text-gray-400 w-28 flex-shrink-0">{l}</span><span className="text-sm text-gray-700">{v}</span></div>
+            ['เลขที่ใบเสร็จ', tax.receipt_number], ['หมายเหตุ', tax.notes]]
+            .filter(([, v]) => v).map(([l, v]) => (
+            <div key={l as string} className="flex gap-2">
+              <span className="text-xs text-gray-400 w-28 flex-shrink-0">{l}</span>
+              <span className="text-sm text-gray-700">{v}</span>
+            </div>
           ))}
           <PhotoGrid entityType="tax" entityId={tax.id} userId={userId} photos={tax.photos ?? []} onUpdated={onUpdated} />
         </div>

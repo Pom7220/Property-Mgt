@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, FileText, AlertCircle } from 'lucide-react'
-import { supabase, getPublicUrl } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
+import { fetchPhotos } from '../../lib/photos'
 import { useAuth } from '../../contexts/AuthContext'
 import type { PropertyDocument } from '../../types'
 import { DOC_TYPE_LABELS } from '../../types'
@@ -17,29 +18,18 @@ export default function DocumentList({ propertyId }: Props) {
   const [modal,   setModal]   = useState(false)
   const [editing, setEditing] = useState<PropertyDocument | null>(null)
 
-  useEffect(() => {
-    fetchDocs()
-  }, [propertyId])
+  useEffect(() => { fetchDocs() }, [propertyId])
 
   const fetchDocs = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('pm_documents')
-      .select('*, photos:pm_photos(id,storage_path,thumbnail_path,display_order,caption,entity_type)')
+      .select('*')
       .eq('property_id', propertyId)
       .order('created_at', { ascending: false })
 
-    if (data) {
-      setDocs(data.map(d => ({
-        ...d,
-        photos: (d.photos ?? [])
-          .filter((ph: { entity_type: string }) => ph.entity_type === 'document')
-          .map((ph: { id: string; storage_path: string; thumbnail_path: string | null; display_order: number; caption: string | null; entity_type: string }) => ({
-            ...ph,
-            url:           getPublicUrl(ph.storage_path),
-            thumbnail_url: ph.thumbnail_path ? getPublicUrl(ph.thumbnail_path) : getPublicUrl(ph.storage_path),
-          }))
-          .sort((a: { display_order: number }, b: { display_order: number }) => a.display_order - b.display_order),
-      })))
+    if (!error && data) {
+      const photoMap = await fetchPhotos('document', data.map(d => d.id))
+      setDocs(data.map(d => ({ ...d, photos: photoMap[d.id] ?? [] })))
     }
     setLoading(false)
   }
@@ -47,7 +37,6 @@ export default function DocumentList({ propertyId }: Props) {
   const openAdd  = () => { setEditing(null); setModal(true) }
   const openEdit = (doc: PropertyDocument) => { setEditing(doc); setModal(true) }
 
-  // Check docs expiring within 60 days
   const soon = docs.filter(d => {
     if (!d.expiry_date) return false
     const diff = (new Date(d.expiry_date).getTime() - Date.now()) / 86400000
@@ -56,7 +45,6 @@ export default function DocumentList({ propertyId }: Props) {
 
   return (
     <div className="p-4 space-y-3">
-      {/* Expiry warning */}
       {soon.length > 0 && (
         <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
           <AlertCircle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
@@ -69,13 +57,11 @@ export default function DocumentList({ propertyId }: Props) {
         </div>
       )}
 
-      {/* Add button */}
       <button
         onClick={openAdd}
         className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-200 rounded-2xl text-sm text-gray-400 active:border-primary-300 active:text-primary-600"
       >
-        <Plus size={18} />
-        เพิ่มเอกสาร
+        <Plus size={18} /> เพิ่มเอกสาร
       </button>
 
       {loading ? (
@@ -90,27 +76,16 @@ export default function DocumentList({ propertyId }: Props) {
       ) : (
         <div className="space-y-3">
           {docs.map(doc => (
-            <DocumentCard
-              key={doc.id}
-              doc={doc}
-              userId={user!.id}
-              onEdit={() => openEdit(doc)}
-              onUpdated={fetchDocs}
-            />
+            <DocumentCard key={doc.id} doc={doc} userId={user!.id}
+              onEdit={() => openEdit(doc)} onUpdated={fetchDocs} />
           ))}
         </div>
       )}
 
-      <Modal
-        open={modal}
-        onClose={() => setModal(false)}
-        title={editing ? `แก้ไข: ${DOC_TYPE_LABELS[editing.doc_type]}` : 'เพิ่มเอกสาร'}
-      >
-        <DocumentForm
-          propertyId={propertyId}
-          initial={editing ?? undefined}
-          onSaved={() => { setModal(false); fetchDocs() }}
-        />
+      <Modal open={modal} onClose={() => setModal(false)}
+        title={editing ? `แก้ไข: ${DOC_TYPE_LABELS[editing.doc_type]}` : 'เพิ่มเอกสาร'}>
+        <DocumentForm propertyId={propertyId} initial={editing ?? undefined}
+          onSaved={() => { setModal(false); fetchDocs() }} />
       </Modal>
     </div>
   )

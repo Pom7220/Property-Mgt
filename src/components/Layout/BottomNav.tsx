@@ -1,15 +1,15 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Settings } from 'lucide-react'
+import { Home, Bell } from 'lucide-react'
 
 const tabs = [
-  { to: '/',          label: 'ทรัพย์สิน', Icon: Home },
-  { to: '/settings',  label: 'ตั้งค่า',   Icon: Settings },
+  { to: '/',          label: 'ทรัพย์สิน',   Icon: Home },
+  { to: '/reminders', label: 'แจ้งเตือน',   Icon: Bell },
 ]
 
 export default function BottomNav() {
   return (
     <nav
-      className="flex bg-white border-t border-gray-200 pb-safe"
+      className="flex bg-white border-t border-gray-200"
       style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
     >
       {tabs.map(({ to, label, Icon }) => (
@@ -19,9 +19,7 @@ export default function BottomNav() {
           end={to === '/'}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs transition-colors ${
-              isActive
-                ? 'text-primary-600'
-                : 'text-gray-400 active:text-gray-600'
+              isActive ? 'text-primary-600' : 'text-gray-400 active:text-gray-600'
             }`
           }
         >
