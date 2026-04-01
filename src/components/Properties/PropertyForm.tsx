@@ -3,9 +3,10 @@ import type { PropertyFormValues, PropertyType } from '../../types'
 import { PROPERTY_TYPE_LABELS } from '../../types'
 
 interface PropertyFormProps {
-  initial?: Partial<PropertyFormValues>
-  onSubmit: (values: PropertyFormValues) => Promise<void>
-  loading?: boolean
+  initial?:     Partial<PropertyFormValues>
+  onSubmit:     (values: PropertyFormValues) => Promise<void>
+  loading?:     boolean
+  submitLabel?: string
 }
 
 const THAI_PROVINCES = [
@@ -34,7 +35,7 @@ const empty: PropertyFormValues = {
   notes: null,
 }
 
-export default function PropertyForm({ initial = {}, onSubmit, loading }: PropertyFormProps) {
+export default function PropertyForm({ initial = {}, onSubmit, loading, submitLabel = 'บันทึก' }: PropertyFormProps) {
   const [form, setForm] = useState<PropertyFormValues>({ ...empty, ...initial })
 
   const set = <K extends keyof PropertyFormValues>(key: K, val: PropertyFormValues[K]) =>
@@ -134,7 +135,7 @@ export default function PropertyForm({ initial = {}, onSubmit, loading }: Proper
         disabled={loading || !form.name}
         className="w-full py-3 bg-primary-600 text-white rounded-xl font-medium text-sm active:bg-primary-700 disabled:opacity-60 mt-2"
       >
-        {loading ? 'กำลังบันทึก...' : 'บันทึก'}
+        {loading ? 'กำลังบันทึก...' : submitLabel}
       </button>
     </form>
   )

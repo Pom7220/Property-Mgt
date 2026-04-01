@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Trash2, MapPin } from 'lucide-react'
+import { ArrowLeft, Trash2, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fetchEntityPhotos } from '../lib/photos'
 import { useAuth } from '../contexts/AuthContext'
-import type { Property } from '../types'
+import type { Property, PropertyFormValues } from '../types'
 import { PROPERTY_TYPE_LABELS } from '../types'
 import DocumentList  from '../components/Documents/DocumentList'
 import FeeList       from '../components/Fees/FeeList'
 import TaxList       from '../components/Taxes/TaxList'
 import EventList     from '../components/Events/EventList'
 import PhotoGrid     from '../components/Photos/PhotoGrid'
+import PropertyForm  from '../components/Properties/PropertyForm'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 type Tab = 'overview' | 'documents' | 'fees' | 'taxes' | 'events'
@@ -33,6 +34,8 @@ export default function PropertyDetailPage() {
 
   const [property, setProperty]     = useState<Property | null>(null)
   const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
   const [activeTab, setActiveTab]   = useState<Tab>(
     (searchParams.get('tab') as Tab) ?? 'overview'
   )
@@ -56,6 +59,18 @@ export default function PropertyDetailPage() {
       setProperty({ ...data, photos })
     }
     setLoading(false)
+  }
+
+  const handleSave = async (values: PropertyFormValues) => {
+    setSaving(true)
+    await supabase
+      .from('pm_properties')
+      .update({ ...values, updated_at: new Date().toISOString() })
+      .eq('id', id!)
+    await fetchProperty()
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   const handleDelete = async () => {
@@ -88,9 +103,9 @@ export default function PropertyDetailPage() {
             <ArrowLeft size={20} />
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate(`/property/${id}/edit`)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
-              <Pencil size={18} />
-            </button>
+            {saved && (
+              <span className="text-xs text-green-300 font-medium animate-pulse">บันทึกแล้ว ✓</span>
+            )}
             <button onClick={() => setConfirmDel(true)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
               <Trash2 size={18} />
             </button>
@@ -132,7 +147,13 @@ export default function PropertyDetailPage() {
       {/* Tab content */}
       <div className="flex-1">
         {activeTab === 'overview' && (
-          <OverviewTab property={property} onPhotosUpdated={fetchProperty} userId={user!.id} />
+          <OverviewTab
+            property={property}
+            onPhotosUpdated={fetchProperty}
+            userId={user!.id}
+            onSave={handleSave}
+            saving={saving}
+          />
         )}
         {activeTab === 'documents' && <DocumentList propertyId={id!} />}
         {activeTab === 'fees'      && <FeeList      propertyId={id!} />}
@@ -154,37 +175,44 @@ export default function PropertyDetailPage() {
   )
 }
 
-function OverviewTab({ property, onPhotosUpdated, userId }: { property: Property; onPhotosUpdated: () => void; userId: string }) {
-  const rows: [string, string | null | undefined][] = [
-    ['ที่อยู่',         property.address],
-    ['เขต/อำเภอ',       property.district],
-    ['จังหวัด',         property.province],
-    ['วันที่ซื้อ',       property.purchase_date],
-    ['ราคาซื้อ',        property.purchase_price != null ? `฿${property.purchase_price.toLocaleString()}` : null],
-    ['มูลค่าปัจจุบัน', property.current_value  != null ? `฿${property.current_value.toLocaleString()}`  : null],
-    ['หมายเหตุ',        property.notes],
-  ]
-
+function OverviewTab({ property, onPhotosUpdated, userId, onSave, saving }: {
+  property:       Property
+  onPhotosUpdated: () => void
+  userId:         string
+  onSave:         (values: PropertyFormValues) => Promise<void>
+  saving:         boolean
+}) {
   return (
-    <div className="p-4 space-y-4">
-      <PhotoGrid
-        entityType="property"
-        entityId={property.id}
-        userId={userId}
-        photos={property.photos ?? []}
-        onUpdated={onPhotosUpdated}
-      />
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-50">
-        {rows.filter(([, v]) => v).map(([label, value]) => (
-          <div key={label} className="flex items-start gap-3 px-4 py-3">
-            <span className="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">{label}</span>
-            <span className="text-sm text-gray-800 flex-1">{value}</span>
-          </div>
-        ))}
-        {rows.every(([, v]) => !v) && (
-          <div className="px-4 py-6 text-center text-sm text-gray-400">ยังไม่มีข้อมูล</div>
-        )}
+    <div className="pb-6">
+      {/* Photos at top */}
+      <div className="px-4 pt-4 pb-2">
+        <PhotoGrid
+          entityType="property"
+          entityId={property.id}
+          userId={userId}
+          photos={property.photos ?? []}
+          onUpdated={onPhotosUpdated}
+        />
       </div>
+
+      {/* Inline editable form — pre-filled with current values */}
+      <PropertyForm
+        initial={{
+          type:           property.type,
+          project_name:   property.project_name,
+          name:           property.name,
+          address:        property.address,
+          district:       property.district,
+          province:       property.province,
+          purchase_date:  property.purchase_date,
+          purchase_price: property.purchase_price,
+          current_value:  property.current_value,
+          notes:          property.notes,
+        }}
+        onSubmit={onSave}
+        loading={saving}
+        submitLabel="บันทึกการเปลี่ยนแปลง"
+      />
     </div>
   )
 }
