@@ -3,7 +3,7 @@ import BottomNav from './BottomNav'
 
 export default function Layout() {
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col bg-gray-50" style={{ height: '100dvh' }}>
       {/* Page content scrolls inside this area */}
       <main className="flex-1 overflow-y-auto overscroll-none">
         <Outlet />
