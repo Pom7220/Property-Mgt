@@ -15,6 +15,8 @@ export default function DashboardPage() {
   const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
 
+  useEffect(() => { document.title = 'จัดการทรัพย์สิน' }, [])
+
   useEffect(() => {
     if (!user) return
     fetchProperties()

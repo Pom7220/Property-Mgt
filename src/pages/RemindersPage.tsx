@@ -15,6 +15,7 @@ interface ReminderItem {
   daysLeft:     number
   type:         'fee' | 'tax'
   amount:       number | null
+  frequency?:   string
 }
 
 function daysUntil(dateStr: string): number {
@@ -23,7 +24,8 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((due.getTime() - today.getTime()) / 86400000)
 }
 
-function urgencyClass(days: number) {
+function urgencyClass(days: number, noDueDate = false) {
+  if (noDueDate)  return { bg: 'bg-gray-50',   border: 'border-gray-200',  text: 'text-gray-500',   badge: 'bg-gray-100 text-gray-500',  label: '—' }
   if (days < 0)   return { bg: 'bg-red-50',    border: 'border-red-200',   text: 'text-red-600',    badge: 'bg-red-100 text-red-700',    label: 'เกินกำหนด' }
   if (days <= 7)  return { bg: 'bg-red-50',    border: 'border-red-200',   text: 'text-red-600',    badge: 'bg-red-100 text-red-700',    label: `${days} วัน` }
   if (days <= 30) return { bg: 'bg-amber-50',  border: 'border-amber-200', text: 'text-amber-600',  badge: 'bg-amber-100 text-amber-700', label: `${days} วัน` }
@@ -56,13 +58,12 @@ export default function RemindersPage() {
     const propIds = props.map(p => p.id)
     const propMap = Object.fromEntries(props.map(p => [p.id, p.name]))
 
-    // Fees with next_due_date
+    // Fees — show all with next_due_date set, OR with no next_due_date (needs attention)
     const { data: fees } = await supabase
       .from('pm_fees')
-      .select('id, property_id, name, fee_type, amount, frequency, next_due_date')
+      .select('id, property_id, name, fee_type, amount, frequency, next_due_date, last_paid_date')
       .in('property_id', propIds)
-      .not('next_due_date', 'is', null)
-      .order('next_due_date')
+      .order('next_due_date', { ascending: true, nullsFirst: false })
 
     // Taxes not yet paid for current + previous year
     const thisYear = new Date().getFullYear()
@@ -76,17 +77,22 @@ export default function RemindersPage() {
     const list: ReminderItem[] = []
 
     for (const f of fees ?? []) {
-      const days = daysUntil(f.next_due_date)
+      const dueDate = f.next_due_date ?? null
+      const days    = dueDate ? daysUntil(dueDate) : 9999
+      const freqLabel = f.frequency === 'semi_annual' ? 'ราย 6 เดือน'
+        : f.frequency === 'annual' ? 'รายปี'
+        : f.frequency === 'monthly' ? 'รายเดือน' : 'ครั้งเดียว'
       list.push({
         id:           f.id,
         propertyId:   f.property_id,
         propertyName: propMap[f.property_id] ?? '',
         title:        f.name,
-        subtitle:     f.frequency === 'semi_annual' ? 'ราย 6 เดือน' : f.frequency === 'annual' ? 'รายปี' : f.frequency === 'monthly' ? 'รายเดือน' : 'ครั้งเดียว',
-        dueDate:      f.next_due_date,
+        subtitle:     freqLabel,
+        dueDate:      dueDate ?? '',
         daysLeft:     days,
         type:         'fee',
         amount:       f.amount,
+        frequency:    f.frequency,
       })
     }
 
@@ -117,8 +123,16 @@ export default function RemindersPage() {
   const openMarkDone = (item: ReminderItem) => {
     setMarkDoneItem(item)
     setPaidDate(new Date().toISOString().slice(0, 10))
-    // Auto-calculate next due based on frequency — for fees
-    setNextDue('')
+    // Auto-suggest next due date based on current due date + frequency
+    if (item.type === 'fee' && item.dueDate && item.frequency && item.frequency !== 'one_time') {
+      const base = new Date(item.dueDate)
+      if (item.frequency === 'monthly')     base.setMonth(base.getMonth() + 1)
+      else if (item.frequency === 'semi_annual') base.setMonth(base.getMonth() + 6)
+      else if (item.frequency === 'annual') base.setFullYear(base.getFullYear() + 1)
+      setNextDue(base.toISOString().slice(0, 10))
+    } else {
+      setNextDue('')
+    }
   }
 
   const handleMarkDone = async () => {
@@ -143,8 +157,9 @@ export default function RemindersPage() {
     fetchReminders()
   }
 
-  const overdue = items.filter(i => i.daysLeft < 0)
-  const upcoming = items.filter(i => i.daysLeft >= 0)
+  const overdue  = items.filter(i => i.daysLeft < 0)
+  const upcoming = items.filter(i => i.daysLeft >= 0 && i.daysLeft < 9999)
+  const noDue    = items.filter(i => i.daysLeft === 9999)
 
   return (
     <div className="flex flex-col min-h-full bg-gray-50">
@@ -156,8 +171,9 @@ export default function RemindersPage() {
         </div>
         {!loading && items.length > 0 && (
           <p className="text-primary-200 text-xs mt-0.5">
-            {overdue.length > 0 && <span className="text-red-300 font-medium">{overdue.length} รายการเกินกำหนด  </span>}
-            {upcoming.length} รายการกำลังจะถึง
+            {overdue.length > 0 && <span className="text-red-300 font-medium">{overdue.length} เกินกำหนด  </span>}
+            {upcoming.length > 0 && <span>{upcoming.length} กำลังจะถึง  </span>}
+            {noDue.length > 0 && <span className="text-primary-300">{noDue.length} ยังไม่ตั้งวัน</span>}
           </p>
         )}
       </div>
@@ -196,6 +212,17 @@ export default function RemindersPage() {
                 </div>
               </section>
             )}
+
+            {noDue.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
+                  ยังไม่ได้ตั้งวันครบกำหนด ({noDue.length})
+                </h2>
+                <div className="space-y-2">
+                  {noDue.map(item => <ReminderCard key={`${item.type}-${item.id}`} item={item} onMark={() => openMarkDone(item)} onNavigate={() => navigate(`/property/${item.propertyId}?tab=fees`)} noDueDate />)}
+                </div>
+              </section>
+            )}
           </>
         )}
       </div>
@@ -222,7 +249,7 @@ export default function RemindersPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
                   วันครบกำหนดครั้งต่อไป
-                  <span className="text-gray-400 font-normal ml-1">(ไม่บังคับ)</span>
+                  {nextDue && <span className="text-primary-400 font-normal ml-1">(คำนวณอัตโนมัติ)</span>}
                 </label>
                 <input type="date" value={nextDue} onChange={e => setNextDue(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
@@ -247,20 +274,28 @@ export default function RemindersPage() {
   )
 }
 
-function ReminderCard({ item, onMark, onNavigate }: { item: ReminderItem; onMark: () => void; onNavigate: () => void }) {
-  const u = urgencyClass(item.daysLeft)
+function ReminderCard({ item, onMark, onNavigate, noDueDate = false }: {
+  item: ReminderItem; onMark: () => void; onNavigate: () => void; noDueDate?: boolean
+}) {
+  const u = urgencyClass(item.daysLeft, noDueDate)
 
   return (
     <div className={`${u.bg} border ${u.border} rounded-2xl overflow-hidden`}>
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Countdown badge */}
         <div className={`${u.badge} rounded-xl px-2.5 py-1.5 text-center min-w-[52px] flex-shrink-0`}>
-          <p className="text-lg font-bold leading-none">
-            {item.daysLeft < 0 ? Math.abs(item.daysLeft) : item.daysLeft}
-          </p>
-          <p className="text-[10px] font-medium leading-none mt-0.5">
-            {item.daysLeft < 0 ? 'วันที่แล้ว' : 'วัน'}
-          </p>
+          {noDueDate ? (
+            <p className="text-xs font-medium leading-none py-1">ยังไม่<br/>ตั้งวัน</p>
+          ) : (
+            <>
+              <p className="text-lg font-bold leading-none">
+                {item.daysLeft < 0 ? Math.abs(item.daysLeft) : item.daysLeft}
+              </p>
+              <p className="text-[10px] font-medium leading-none mt-0.5">
+                {item.daysLeft < 0 ? 'วันที่แล้ว' : 'วัน'}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Info */}
@@ -274,17 +309,19 @@ function ReminderCard({ item, onMark, onNavigate }: { item: ReminderItem; onMark
             <span className="text-xs text-gray-400">{item.subtitle}</span>
             {item.amount && <span className={`text-xs font-semibold ${u.text}`}>฿{item.amount.toLocaleString()}</span>}
           </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Clock size={10} className="text-gray-400" />
-            <span className="text-xs text-gray-400">ครบกำหนด {item.dueDate}</span>
-          </div>
+          {!noDueDate && item.dueDate && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <Clock size={10} className="text-gray-400" />
+              <span className="text-xs text-gray-400">ครบกำหนด {item.dueDate}</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
         <div className="flex flex-col gap-1.5 flex-shrink-0">
           <button onClick={onMark}
             className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg active:bg-green-700">
-            ชำระแล้ว
+            {noDueDate ? 'ตั้งวัน' : 'ชำระแล้ว'}
           </button>
           <button onClick={onNavigate}
             className="px-3 py-1.5 bg-white/80 text-gray-600 text-xs font-medium rounded-lg active:bg-white flex items-center gap-0.5 whitespace-nowrap">

@@ -10,6 +10,15 @@ const empty: FeeFormValues = {
   due_month: null, last_paid_date: null, next_due_date: null, notes: null,
 }
 
+function calcNextDue(lastPaid: string, frequency: FeeFrequency): string {
+  const d = new Date(lastPaid)
+  if (frequency === 'monthly')     d.setMonth(d.getMonth() + 1)
+  else if (frequency === 'semi_annual') d.setMonth(d.getMonth() + 6)
+  else if (frequency === 'annual') d.setFullYear(d.getFullYear() + 1)
+  else return ''
+  return d.toISOString().slice(0, 10)
+}
+
 export default function FeeForm({ propertyId, initial, onSaved }: Props) {
   const isEdit = Boolean(initial)
   const [form, setForm] = useState<FeeFormValues>(initial ? {
@@ -21,6 +30,24 @@ export default function FeeForm({ propertyId, initial, onSaved }: Props) {
   const [error, setError]     = useState<string | null>(null)
 
   const set = <K extends keyof FeeFormValues>(k: K, v: FeeFormValues[K]) => setForm(f => ({ ...f, [k]: v }))
+
+  // When last_paid_date changes, auto-compute next_due_date
+  const handleLastPaidChange = (val: string | null) => {
+    setForm(f => ({
+      ...f,
+      last_paid_date: val,
+      next_due_date: val && f.frequency !== 'one_time' ? calcNextDue(val, f.frequency) : f.next_due_date,
+    }))
+  }
+
+  // When frequency changes, recompute next_due_date if last_paid is set
+  const handleFrequencyChange = (val: FeeFrequency) => {
+    setForm(f => ({
+      ...f,
+      frequency: val,
+      next_due_date: f.last_paid_date && val !== 'one_time' ? calcNextDue(f.last_paid_date, val) : f.next_due_date,
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError(null)
@@ -57,7 +84,7 @@ export default function FeeForm({ propertyId, initial, onSaved }: Props) {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">ความถี่</label>
-          <select value={form.frequency} onChange={e => set('frequency', e.target.value as FeeFrequency)}
+          <select value={form.frequency} onChange={e => handleFrequencyChange(e.target.value as FeeFrequency)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-400">
             {(Object.entries(FEE_FREQ_LABELS) as [FeeFrequency, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -67,11 +94,16 @@ export default function FeeForm({ propertyId, initial, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">ชำระล่าสุด</label>
-          <input type="date" value={form.last_paid_date ?? ''} onChange={e => set('last_paid_date', e.target.value || null)}
+          <input type="date" value={form.last_paid_date ?? ''} onChange={e => handleLastPaidChange(e.target.value || null)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">ครบกำหนดต่อไป</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            ครบกำหนดต่อไป
+            {form.last_paid_date && form.frequency !== 'one_time' && (
+              <span className="text-primary-400 font-normal ml-1">(คำนวณอัตโนมัติ)</span>
+            )}
+          </label>
           <input type="date" value={form.next_due_date ?? ''} onChange={e => set('next_due_date', e.target.value || null)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
         </div>

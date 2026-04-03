@@ -57,6 +57,7 @@ export default function PropertyDetailPage() {
     if (!error && data) {
       const photos = await fetchEntityPhotos('property', id!)
       setProperty({ ...data, photos })
+      document.title = `${data.name} | จัดการทรัพย์สิน`
     }
     setLoading(false)
   }
@@ -98,34 +99,40 @@ export default function PropertyDetailPage() {
     <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
       <div className={`sticky top-0 z-10 ${typeBg} pt-safe px-4 pb-0`}>
-        <div className="flex items-center justify-between h-12">
-          <button onClick={() => navigate(-1)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
+        <div className="flex items-center gap-2 h-12">
+          <button onClick={() => navigate(-1)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20 flex-shrink-0">
             <ArrowLeft size={20} />
           </button>
-          <div className="flex items-center gap-2">
+
+          {/* Property identity — always visible */}
+          <div className="flex-1 min-w-0">
+            {property.project_name && (
+              <p className="text-white/60 text-[10px] leading-none truncate">{property.project_name}</p>
+            )}
+            <p className="text-white font-bold text-sm leading-tight truncate">{property.name}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] bg-white/20 text-white/90 px-1.5 py-0 rounded-full leading-4">
+                {PROPERTY_TYPE_LABELS[property.type]}
+              </span>
+              {(property.district || property.province) && (
+                <div className="flex items-center gap-0.5 min-w-0">
+                  <MapPin size={9} className="text-white/50 flex-shrink-0" />
+                  <span className="text-white/60 text-[10px] truncate">
+                    {[property.district, property.province].filter(Boolean).join(', ')}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 flex-shrink-0">
             {saved && (
-              <span className="text-xs text-green-300 font-medium animate-pulse">บันทึกแล้ว ✓</span>
+              <span className="text-xs text-green-300 font-medium animate-pulse">✓</span>
             )}
             <button onClick={() => setConfirmDel(true)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
               <Trash2 size={18} />
             </button>
           </div>
-        </div>
-
-        <div className="pb-3">
-          {property.project_name && <p className="text-white/70 text-xs">{property.project_name}</p>}
-          <h1 className="text-white font-bold text-lg leading-tight">{property.name}</h1>
-          {(property.district || property.province) && (
-            <div className="flex items-center gap-1 mt-0.5">
-              <MapPin size={11} className="text-white/60" />
-              <span className="text-white/70 text-xs">
-                {[property.district, property.province].filter(Boolean).join(', ')}
-              </span>
-            </div>
-          )}
-          <span className="inline-block mt-1 text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">
-            {PROPERTY_TYPE_LABELS[property.type]}
-          </span>
         </div>
 
         {/* Tabs */}
