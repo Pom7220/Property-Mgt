@@ -99,43 +99,41 @@ export default function PropertyDetailPage() {
     <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
       <div className={`sticky top-0 z-10 ${typeBg} pt-safe px-4 pb-0`}>
-        <div className="flex items-center gap-2 h-12">
-          <button onClick={() => navigate(-1)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20 flex-shrink-0">
+        {/* Row 1: back + name + delete */}
+        <div className="flex items-center justify-between py-2">
+          <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-full text-white/80 active:text-white active:bg-white/20 flex-shrink-0">
             <ArrowLeft size={20} />
           </button>
-
-          {/* Property identity — always visible */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 mx-2">
             {property.project_name && (
               <p className="text-white/60 text-[10px] leading-none truncate">{property.project_name}</p>
             )}
-            <p className="text-white font-bold text-sm leading-tight truncate">{property.name}</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] bg-white/20 text-white/90 px-1.5 py-0 rounded-full leading-4">
-                {PROPERTY_TYPE_LABELS[property.type]}
-              </span>
-              {(property.district || property.province) && (
-                <div className="flex items-center gap-0.5 min-w-0">
-                  <MapPin size={9} className="text-white/50 flex-shrink-0" />
-                  <span className="text-white/60 text-[10px] truncate">
-                    {[property.district, property.province].filter(Boolean).join(', ')}
-                  </span>
-                </div>
-              )}
-            </div>
+            <p className="text-white font-bold text-sm leading-snug truncate">{property.name}</p>
           </div>
-
           <div className="flex items-center gap-1 flex-shrink-0">
-            {saved && (
-              <span className="text-xs text-green-300 font-medium animate-pulse">✓</span>
-            )}
+            {saved && <span className="text-xs text-green-300 font-medium animate-pulse">✓</span>}
             <button onClick={() => setConfirmDel(true)} className="p-1.5 rounded-full text-white/80 active:text-white active:bg-white/20">
               <Trash2 size={18} />
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Row 2: type + location */}
+        <div className="flex items-center gap-2 pb-2">
+          <span className="text-[10px] bg-white/20 text-white/90 px-2 py-0.5 rounded-full">
+            {PROPERTY_TYPE_LABELS[property.type]}
+          </span>
+          {(property.district || property.province) && (
+            <div className="flex items-center gap-0.5 min-w-0">
+              <MapPin size={9} className="text-white/50 flex-shrink-0" />
+              <span className="text-white/60 text-[10px] truncate">
+                {[property.district, property.province].filter(Boolean).join(', ')}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Row 3: Tabs */}
         <div className="flex overflow-x-auto gap-1 pb-0">
           {TABS.map(t => (
             <button
