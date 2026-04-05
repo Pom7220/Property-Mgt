@@ -23,7 +23,7 @@ export default function DocumentForm({ propertyId, initial, onSaved }: Props) {
 
   // After save we switch to photo-upload step
   const [savedDoc, setSavedDoc] = useState<PropertyDocument | null>(initial ?? null)
-  const [step, setStep]         = useState<'form' | 'photos'>(initial ? 'photos' : 'form')
+  const [step, setStep]         = useState<'form' | 'photos'>('form')
 
   const [form, setForm] = useState<DocumentFormValues>(initial ? {
     doc_type: initial.doc_type, name: initial.name, description: initial.description,
@@ -118,7 +118,7 @@ export default function DocumentForm({ propertyId, initial, onSaved }: Props) {
 
       <button type="submit" disabled={loading || !form.name}
         className="w-full py-3 bg-primary-600 text-white rounded-xl font-medium text-sm active:bg-primary-700 disabled:opacity-60">
-        {loading ? 'กำลังบันทึก...' : 'บันทึก และเพิ่มรูปภาพ →'}
+        {loading ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข →' : 'บันทึก และเพิ่มรูปภาพ →'}
       </button>
     </form>
   )
